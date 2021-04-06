@@ -11,6 +11,9 @@ from scipy import interpolate
 from scipy import signal
 from scipy import stats
 
+from os import listdir
+from os.path import isfile, join
+
 def butter_highpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
@@ -43,27 +46,39 @@ def clean(X):
     img  = 20*np.log10(img)
     return img
 
+def capture(folder,index):
+    RFPath = folder+'/M_RFArrays/'
+    TimePath = folder+'/M_Arrays/'
+
+    files = listdir(RFPath)
+    timeFiles = ['T'+file for file in files]
+    print(files,timeFiles)
+    return RFPath + files[index],TimePath + timeFiles[index]
+
+
 aspect = 0.1
-file_name= 'N45_120'
-Path = '../Clean/UserSessions/Unfocused_flow/'+ file_name +'/M_RFArrays/'
-file = 'data.npy'
-T_Path = '../Clean/UserSessions/Unfocused_flow/'+ file_name +'/M_Arrays/'
-T_file = 'time.npy'
-T = np.load(T_Path +T_file )
+
+# file_name= 'Unfocused_flow/'+'N45_120'
+file_name= 'Rabbit_Full/'+'Aor_F_10_25'
+XF, TF = capture( file_name,0) 
+
+X = np.load(XF )
+X = X[500:700,:]
+X = butter_highpass_filter(X.T,1*1e6,20*1e6,order =5).T  # MUST BE ROW ARRAY 32*1000
+
+
+
+T = np.load(TF)
 T_end = T[-1]-T[0]
 # print(T[0],T[-1],T_end, 1/(T[1]-T[0]))
 
-X = np.load(Path +file )
-
-X = X[250:700,:]
-
 extent = [0,T_end, X.shape[0] *1.540*0.5*(1/20),0]
 
-X = butter_highpass_filter(X.T,1*1e6,20*1e6,order =5).T  # MUST BE ROW ARRAY 32*1000
+
 
 fig2 = plt.subplot(311)
 Image = plt.imshow(clean(X),cmap='gray',interpolation='none',extent = extent, aspect=aspect)
-Image.set_clim(vmin= -40, vmax= 0)
+Image.set_clim(vmin= -30, vmax= 0)
 
 
 u, s, vh = np.linalg.svd(X, full_matrices=False)
@@ -74,7 +89,7 @@ print(X.shape,u.shape,s.shape,vh.shape)
 for element in np.round(s):
     print(element,end =",")
 be = 0
-ee = 2
+ee = 30
 Y =  np.dot(u[:,be:ee] * s[be:ee], vh[be:ee,:])
 
 fig2 = plt.subplot(312)
@@ -85,12 +100,12 @@ print(Y.shape)
 
 
 be = 50
-ee = 300
+ee = 100
 Z =  np.dot(u[:,be:ee] * s[be:ee], vh[be:ee,:])
 
 fig2 = plt.subplot(313)
 Image = plt.imshow(clean(Z),cmap='gray',interpolation='none',extent = extent, aspect=aspect)
-Image.set_clim(vmin= -40, vmax= 0)
+Image.set_clim(vmin= -25, vmax= 0)
 
 print(Z.shape)
 
