@@ -103,7 +103,7 @@ class PlotWindow():
         
         # # ********************************************** Figure
         fig = plt.figure(figsize =(15,5) )#
-        self.image = plt.imshow(self.dataToPlot, cmap='gray',aspect=0.1,extent=self.extent)
+        self.image = plt.imshow(self.dataToPlot, cmap='gray',aspect='auto',extent=self.extent)
         plt.title('Image')
         plt.ylabel('Width (mm)')
         plt.xlabel('Time (Seconds)')
@@ -209,7 +209,7 @@ class PlotWindow():
      
      def Wall(self):
 
-        data = self.clean1(self.dataRF)
+        data = self.clean1(self.dataRF)[:,::2]
 
         x = data.shape[0]
         y = data.shape[1]
@@ -230,9 +230,11 @@ class PlotWindow():
                     
         plt.figure()
       #   Image = plt.imshow(corrMap,cmap='gray', aspect='auto')
-        TopInd = np.argmax(corrMapTop,axis=0)[::2]*self.scale /10
-        BotInd = np.argmax(corrMapBot,axis=0)[::2] *self.scale /10
-        corrInd = xx*self.scale - TopInd +  BotInd
+        TopInd = np.argmax(corrMapTop,axis=0)/10
+        BotInd = np.argmax(corrMapBot,axis=0)/10
+
+
+        corrInd = xx +  BotInd  - TopInd 
      
       #   corrInd =  xx*self.scale + (TopInd - BotInd)
 
@@ -241,15 +243,26 @@ class PlotWindow():
 
       #   plt.figure()
         plt.close()
-        plt.figure(figsize=(15,2))
-      
-        plt.plot(self.Time,corrInd)
+
+        plt.figure(figsize=(15,4))
+        plt.subplot(211)
+
+        plt.imshow(data,extent=[self.Time[0],self.Time[-1],200,0 ],aspect='auto',cmap='gray')
+        plt.plot(self.Time,TopInd*0 +100,'w')
+        
+        plt.plot(self.Time,xx + BotInd,'m')
+        plt.plot(self.Time,TopInd,'r' )
+        
+        # plt.show()
+
+        # plt.figure(figsize=(15,2))
+        plt.subplot(313)
+        plt.plot(self.Time,corrInd*self.scale )
         plt.title('Diameter')
         plt.ylabel('Width (mm)')
         plt.xlabel('Time (Seconds)')
         plt.locator_params(axis='y', nbins=10)
         plt.locator_params(axis='x', nbins=10)
-      #   plt.xlim(0, 6) 
         plt.margins(0)
         plt.show()
         pass
@@ -259,8 +272,8 @@ class PlotWindow():
 
      
 if __name__ == "__main__":
-    file_name= 'Rabbit_Full/'+'Aor_F_10_25'
-   #  file_name= 'Rabbit_Full/'+'Aor_F_20_26'
+    file_name= 'Rabbit_Full/'+'Aor_F_10_23'
+    # file_name= 'Rabbit_Full/'+'Aor_F_20_26'
     root = tk.Tk()
     MainApp(root,file_name,0).grid(row=0, column=1, padx=10, pady=5, sticky='NW')
     root.mainloop()
