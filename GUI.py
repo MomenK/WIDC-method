@@ -68,8 +68,9 @@ class MainApp(tk.Frame):
 
 class PlotWindow():
      def __init__(self, parent, data,Time):
-        self.startIdx = 500
-        self.range = 200
+        self.startIdx = 558
+        self.range = 130
+        self.DR = 50
         self.endIdx = self.startIdx + self.range
         self.data = data
         self.dataRF = self.data[self.startIdx :self.endIdx ,:]
@@ -86,24 +87,42 @@ class PlotWindow():
         
         # **********************************************  Scale
         self.VerOffVar =  tk.DoubleVar()
-        self.VerOffScale = tk.Scale( parent, orient=tk.VERTICAL,from_=0, to=600, resolution=20, \
+        self.VerOffScale = tk.Scale( parent, orient=tk.VERTICAL,from_=500, to=800, resolution=1, \
         length=300, label='Vertical offset ',variable = self.VerOffVar, command= self._updateVerOff )  
+        self.VerOffScale.set(int(self.startIdx + self.range/2))
+
+        self.RangeVar =  tk.DoubleVar()
+        self.RangeScale = tk.Scale( parent, orient=tk.VERTICAL,from_=100, to=200, resolution=10, \
+        length=300, label='Vertical offset ',variable = self.RangeVar, command= self._updateRange )  
+        self.RangeVar.set(self.range)
         
         self.DRVar =  tk.DoubleVar()
         self.Scale = tk.Scale( parent, orient=tk.HORIZONTAL,from_=1, to=60, resolution=1, \
         length=300, label='Dynamic range (dB)',variable = self.DRVar, command= self._update ) 
+        self.Scale.set(self.DR)
 
         self.MinVar =  tk.DoubleVar()
         self.MinScale = tk.Scale( parent, orient=tk.HORIZONTAL,from_=0, to=self.range, resolution=1, \
         length=300, label='Minimum Rank',variable = self.MinVar, command= self._SVDupdate ) 
+        self.MinScale.set(0)
 
         self.MaxVar =  tk.DoubleVar()
         self.MaxScale = tk.Scale( parent, orient=tk.HORIZONTAL,from_=0, to=self.range, resolution=1, \
         length=300, label='Maximum Rank',variable = self.MaxVar, command= self._SVDupdate ) 
+        self.MaxVar.set(self.range)
         
         # # ********************************************** Figure
         fig = plt.figure(figsize =(15,5) )#
+        self.ax = plt.gca()
         self.image = plt.imshow(self.dataToPlot, cmap='gray',aspect='auto',extent=self.extent)
+
+        self.TopInd = np.zeros_like(self.Time) + (self.startIdx +  self.range/4)
+        self.BotInd = np.zeros_like(self.Time) + (self.endIdx - self.range/4)
+
+        self.axpMid, = self.ax.plot(self.Time,np.zeros_like(self.Time) + (self.startIdx +  self.range/2)*self.scale,'w')
+        self.axTop, = self.ax.plot(self.Time,self.TopInd *self.scale,'m')
+        self.axBot, = self.ax.plot(self.Time,self.BotInd *self.scale,'r')
+
         plt.title('Image')
         plt.ylabel('Width (mm)')
         plt.xlabel('Time (Seconds)')
@@ -118,8 +137,11 @@ class PlotWindow():
 
      def place(self,x,y):
         self.VerOffScale.grid(row=x, column=y+1, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
+        self.RangeScale.grid(row=x, column=y+2, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
         self.button.grid(row=x+1, column=y+1, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
+
         self.canvas.get_tk_widget().grid(row=x, column=y, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
+
         self.Scale.grid(row=x+1, column=y, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
         self.MinScale.grid(row=x+2, column=y, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
         self.MaxScale.grid(row=x+3, column=y, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
@@ -148,7 +170,12 @@ class PlotWindow():
       #   self.dataToPlot[0:100,:] = 0
 
         self.image.set_data(self.dataToPlot)
-        self.extent = [0,6, self.endIdx *self.scale,self.startIdx *self.scale]
+        self.extent = [self.Time[0],self.Time[-1], self.endIdx *self.scale,self.startIdx *self.scale]
+
+
+        self.axpMid.set_ydata(np.zeros_like(self.Time) + (self.startIdx +  self.range/2)*self.scale)
+        self.axTop.set_ydata(self.BotInd*self.scale)
+        self.axBot.set_ydata(self.TopInd*self.scale)
 
         self.image.set_extent(self.extent)
         self.canvas.draw()
@@ -156,14 +183,20 @@ class PlotWindow():
 
 
      def _updateVerOff(self,value):
-        self.startIdx = int(self.VerOffScale.get())
+        self.startIdx = int(self.VerOffVar.get()- self.range/2) 
         self.endIdx = self.startIdx + self.range
+
+        self.TopInd = np.zeros_like(self.Time) + (self.startIdx +  self.range/4)
+        self.BotInd = np.zeros_like(self.Time) + (self.endIdx - self.range/4)
         self.updateImage()
         pass
 
+     def _updateRange(self,value):
+        self.range = int(self.RangeVar.get())
+        self._updateVerOff(0)
+        pass
+
      def _update(self,value):
-      #   thre = 10**(-self.DRVar.get()/20)
-      #   self.dataToPlot[self.dataToPlot < thre] = thre
         self.image.set_clim(vmin=-self.DRVar.get(), vmax= 0)
         self.canvas.draw()
       #   self.updateImage()
@@ -191,77 +224,66 @@ class PlotWindow():
         return img
 
      
-     def corrr(self,x,y):
+     def corrr(self,x,y,scale):
         kind = 'cubic'
         xsize = x.shape[0]
         xaxis = np.linspace(0,xsize,xsize)
 
-        upaxis = np.linspace(0,xsize,xsize*10)
+        upaxis = np.linspace(0,xsize,xsize*scale)
         fx = interpolate.interp1d(xaxis, x,kind= kind)
         fy = interpolate.interp1d(xaxis, y,kind= kind)
 
         x = fx(upaxis)
         y = fy(upaxis)
-      #   x = self.clean1(x)
-      #   y = self.clean1(y)
+
         return signal.correlate(x,y,mode='same')
 
      
      def Wall(self):
-
+        upsample  = 5
         data = self.clean1(self.dataRF)[:,::2]
 
         x = data.shape[0]
         y = data.shape[1]
         xx = int(x/2)
-        corrMapTop = np.zeros((10*xx,y))
-        corrMapBot = np.zeros((10*xx,y))
-
+        corrMapTop = np.zeros((upsample*xx,y))
+        corrMapBot = np.zeros((upsample*xx,y))
         sigTop = data[:,100][0:xx]
         sigBot = data[:,100][xx:]
 
-        
         for i in range(0,y):
             sigTop1 = data[:,i][0:xx]       
-            corrMapTop[:,i] = self.corrr(sigTop1,sigTop)
+            corrMapTop[:,i] = self.corrr(sigTop1,sigTop,upsample)
 
             sigBot1 = data[:,i][xx:]       
-            corrMapBot[:,i] = self.corrr(sigBot1,sigBot)
+            corrMapBot[:,i] = self.corrr(sigBot1,sigBot,upsample)
                     
-        plt.figure()
-      #   Image = plt.imshow(corrMap,cmap='gray', aspect='auto')
-        TopInd = np.argmax(corrMapTop,axis=0)/10
-        BotInd = np.argmax(corrMapBot,axis=0)/10
-
-
-        corrInd = xx +  BotInd  - TopInd 
-     
-      #   corrInd =  xx*self.scale + (TopInd - BotInd)
-
+        TopInd = np.argmax(corrMapTop,axis=0)/upsample
+        BotInd = xx + np.argmax(corrMapBot,axis=0)/upsample
+        self.TopInd = self.startIdx +TopInd
+        self.BotInd = self.startIdx + BotInd
+        corrInd = BotInd  - TopInd 
         print(corrInd.shape)
         print(self.Time.shape)
 
-      #   plt.figure()
-        plt.close()
+      #   self.axTop.set_ydata(self.BotInd*self.scale)
+      #   self.axBot.set_ydata(self.TopInd*self.scale)
+      #   self.canvas.draw()
+        self.updateImage()
 
         plt.figure(figsize=(15,4))
         plt.subplot(211)
-
-        plt.imshow(data,extent=[self.Time[0],self.Time[-1],200,0 ],aspect='auto',cmap='gray')
-        plt.plot(self.Time,TopInd*0 +100,'w')
-        
-        plt.plot(self.Time,xx + BotInd,'m')
+        plt.imshow(data,extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
+        plt.plot(self.Time,np.zeros_like(self.Time) + xx,'w')
+        plt.plot(self.Time,BotInd,'m')
         plt.plot(self.Time,TopInd,'r' )
-        
-        # plt.show()
 
-        # plt.figure(figsize=(15,2))
         plt.subplot(313)
         plt.plot(self.Time,corrInd*self.scale )
         plt.title('Diameter')
         plt.ylabel('Width (mm)')
         plt.xlabel('Time (Seconds)')
-        plt.locator_params(axis='y', nbins=10)
+        plt.locator_params(axis='y', nbins=8)
         plt.locator_params(axis='x', nbins=10)
         plt.margins(0)
         plt.show()
@@ -272,8 +294,10 @@ class PlotWindow():
 
      
 if __name__ == "__main__":
-    file_name= 'Rabbit_Full/'+'Aor_F_10_23'
-    # file_name= 'Rabbit_Full/'+'Aor_F_20_26'
-    root = tk.Tk()
-    MainApp(root,file_name,0).grid(row=0, column=1, padx=10, pady=5, sticky='NW')
-    root.mainloop()
+   file_name= 'Rabbit_Full/'+'Aor_F_10_23'
+#  file_name= 'Rabbit_Full/'+'Aor_F_20_24'
+   # file_name= 'Rabbit_Full/'+'Aor_M_10'
+
+   root = tk.Tk()
+   MainApp(root,file_name,0).grid(row=0, column=1, padx=10, pady=5, sticky='NW')
+   root.mainloop()
