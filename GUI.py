@@ -72,7 +72,7 @@ class PlotWindow():
    def __init__(self, parent, data,Time):
       self.startIdx = 558
       self.range = 130
-      self.DR = 50
+      self.DR = 40
       self.endIdx = self.startIdx + self.range
       self.data = data
       self.dataRF = self.data[self.startIdx :self.endIdx ,:]
@@ -94,7 +94,7 @@ class PlotWindow():
       self.VerOffScale.set(int(self.startIdx + self.range/2))
 
       self.RangeVar =  tk.DoubleVar()
-      self.RangeScale = tk.Scale( parent, orient=tk.VERTICAL,from_=100, to=200, resolution=10, \
+      self.RangeScale = tk.Scale( parent, orient=tk.VERTICAL,from_=50, to=200, resolution=10, \
       length=300, label='Vertical offset ',variable = self.RangeVar, command= self._updateRange )  
       self.RangeVar.set(self.range)
       
@@ -283,7 +283,7 @@ class PlotWindow():
       plt.plot(self.Time,TopInd,'r' )
 
       plt.subplot(313)
-      plt.plot(self.Time,corrInd*self.scale )
+      plt.plot(self.Time[2:],corrInd[2:]*self.scale )
       plt.title('Diameter')
       plt.ylabel('Width (mm)')
       plt.xlabel('Time (Seconds)')
@@ -294,7 +294,7 @@ class PlotWindow():
       pass
 
    def Flow(self):
-      data = self.clean(self.dataRF)
+      data = self.clean1(self.dataRF)
       # convert one m-line into three with interpolation to give perception of x-axis
       x = data.shape[0]
       y = data.shape[1]
@@ -305,20 +305,23 @@ class PlotWindow():
       for i in range(0,int(y/2)):
          ii = int(self.TopInd[i]) - self.startIdx
          jj = int(self.BotInd[i]) - self.startIdx
-         # print(ii,jj)np
+         print(2*i,2*i+1)
          data[0:ii,2*i:2*i+2] = 0
          data[jj:,2*i:2*i+2] = 0
          coff_vector[i] = self.corr_coff(data[ii:jj,2*i:2*i+2])
+         # coff_vector[i] = self.corr_coff(data[:,2*i:2*i+2])
 
 
+      
+      flow = 1-coff_vector
       # alpha = (-1/np.log(coff_vector**2))**0.5
       # flow = alpha
-      p = 0.2
-      dr = 200e-6
-      alpha = ((-1/(2*np.log(p**2)))**0.5)*dr
-      dt = dr
-      D = ((-2*np.log(coff_vector))**0.5)/dt
-      flow = D*alpha
+      # p = 0.2
+      # dr = 200e-6
+      # alpha = ((-1/(2*np.log(p**2)))**0.5)*dr
+      # dt = dr
+      # D = ((-2*np.log(coff_vector))**0.5)/dt
+      # flow = D*alpha
       flow_smooth = uniform_filter1d(flow, size=20)
       plt.figure(figsize=(15,4))
       plt.subplot(211)
@@ -327,6 +330,9 @@ class PlotWindow():
       plt.subplot(313)
       # plt.plot(self.Time, flow)
       plt.plot(self.Time, flow_smooth)
+      plt.title('Flow')
+      plt.ylabel('[1 - r]')
+      plt.xlabel('Time (Seconds)')
       plt.margins(0)
       plt.show()
       # self.TopInd
@@ -341,7 +347,7 @@ class PlotWindow():
      
 if __name__ == "__main__":
    file_name= 'Rabbit_Full/'+'Aor_F_10_23'
-#  file_name= 'Rabbit_Full/'+'Aor_F_20_24'
+   # file_name= 'Rabbit_Full/'+'Aor_F_20_24'
    # file_name= 'Rabbit_Full/'+'Aor_M_10'
 
    root = tk.Tk()
