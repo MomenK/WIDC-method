@@ -72,7 +72,7 @@ class PlotWindow():
    def __init__(self, parent, data,Time):
       self.startIdx = 558
       self.range = 130
-      self.DR = 40
+      self.DR = 30
       self.endIdx = self.startIdx + self.range
       self.data = data
       self.dataRF = self.data[self.startIdx :self.endIdx ,:]
@@ -85,6 +85,7 @@ class PlotWindow():
       self.Time = Time
 
       self.scale = 1.540*0.5*(1/20)
+      print(self.scale)
       self.extent = [self.Time[0],self.Time[-1], self.endIdx *self.scale,self.startIdx *self.scale]
       
       # **********************************************  Scale
@@ -171,7 +172,9 @@ class PlotWindow():
       #   print (thre,np.amax(self.dataRF),np.amin(self.dataRF)) 
 
       self.dataToPlot = self.clean(self.dataRF)
-      #   self.dataToPlot[0:100,:] = 0
+
+
+
 
       self.image.set_data(self.dataToPlot)
       self.extent = [self.Time[0],self.Time[-1], self.endIdx *self.scale,self.startIdx *self.scale]
@@ -214,6 +217,7 @@ class PlotWindow():
    
    def clean(self,X):
       img = hilbert(X.T).T  
+      # img = hilbert(X)
       img= img/np.amax(img)
       img = np.abs(img)
       img  = 20*np.log10(img)
@@ -229,7 +233,7 @@ class PlotWindow():
 
    
    def corrr(self,x,y,scale):
-      kind = 'cubic'
+      kind = 'quadratic'
       xsize = x.shape[0]
       xaxis = np.linspace(0,xsize,xsize)
 
@@ -244,7 +248,7 @@ class PlotWindow():
 
    
    def Wall(self):
-      upsample  = 5
+      upsample  = 10
       data = self.clean1(self.dataRF)[:,::2]
 
       x = data.shape[0]
@@ -294,38 +298,80 @@ class PlotWindow():
       pass
 
    def Flow(self):
-      data = self.clean1(self.dataRF)
+
+      dataRF1 = self.dataRF.copy()[:,::2]
+      dataRF2 = self.dataRF.copy()[:,1::2]
+
+      # dataRF1 = dataRF1 - uniform_filter1d(dataRF1, size=50,axis=1)
+      # dataRF2 = dataRF2 - uniform_filter1d(dataRF2, size=50,axis=1)
+      print(dataRF1.shape)
+
+      for i in range(0,dataRF1.shape[0]):
+         dataRF1[i,:] = dataRF1[i,:]- uniform_filter1d(dataRF1[i,:], size=100)
+         dataRF2[i,:] = dataRF2[i,:]- uniform_filter1d(dataRF2[i,:], size=100)
+         print(i)
+
+      # dataRF1 = dataRF1 - uniform_filter1d(dataRF1.T, size=50).T
+      # dataRF2 = dataRF2 - uniform_filter1d(dataRF2.T, size=50).T
+
+      data = self.clean(self.dataRF)
+      data1 = data[:,::2]
+      data2 = data[:,1::2]
+
+
       # convert one m-line into three with interpolation to give perception of x-axis
       x = data.shape[0]
       y = data.shape[1]
-      print(x,y)
+      print('starting flow calculations')
+
+      print('Shape of data array')
+      print(data.shape,data1.shape,data2.shape)
+
+      print('Shape of time array')
+      print(self.Time.shape)
 
       coff_vector = np.zeros(int(y/2))
+
+
 
       for i in range(0,int(y/2)):
          ii = int(self.TopInd[i]) - self.startIdx
          jj = int(self.BotInd[i]) - self.startIdx
-         print(2*i,2*i+1)
+
          data[0:ii,2*i:2*i+2] = 0
          data[jj:,2*i:2*i+2] = 0
-         coff_vector[i] = self.corr_coff(data[ii:jj,2*i:2*i+2])
-         # coff_vector[i] = self.corr_coff(data[:,2*i:2*i+2])
+
+         dataRF1[0:ii,i] = 0
+         dataRF1[jj:,i] = 0
+
+         dataRF2[0:ii,i] = 0
+         dataRF2[jj:,i] = 0
+
+         coff_vector[i] = self.corr_coff2(dataRF1[ii:jj,i],dataRF2[ii:jj,i])
+
+       
 
 
       
       flow = 1-coff_vector
+
+      # flow = coff_vector
+
       # alpha = (-1/np.log(coff_vector**2))**0.5
       # flow = alpha
+
       # p = 0.2
       # dr = 200e-6
       # alpha = ((-1/(2*np.log(p**2)))**0.5)*dr
       # dt = dr
       # D = ((-2*np.log(coff_vector))**0.5)/dt
       # flow = D*alpha
+
       flow_smooth = uniform_filter1d(flow, size=20)
       plt.figure(figsize=(15,4))
       plt.subplot(211)
       plt.imshow(data,extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
+      plt.plot(self.Time, x*(1-(flow_smooth/np.amax(flow_smooth))))
 
       plt.subplot(313)
       # plt.plot(self.Time, flow)
@@ -334,21 +380,76 @@ class PlotWindow():
       plt.ylabel('[1 - r]')
       plt.xlabel('Time (Seconds)')
       plt.margins(0)
+   
+
+
+
+
+
+      plt.figure(figsize=(15,4))
+      plt.subplot(511)
+      plt.imshow( self.clean(dataRF1),extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
+
+      plt.subplot(512)
+      plt.imshow(self.clean(dataRF2),extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
+
+      avgRF = (dataRF1+dataRF2)/2
+      plt.subplot(513)
+      plt.imshow(self.clean(avgRF),extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
+
+      plt.subplot(514)
+      diff = dataRF1-dataRF2
+      plt.imshow((diff),extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
+
+
+      plt.subplot(515)
+      diff = self.clean1(diff)
+      plt.imshow((diff),extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
+
+
+
+
+
+
+
+      # plt.figure(figsize=(15,4))
+
+      # plt.subplot(211)
+      # diff =  np.abs(dataRF2-dataRF1)
+      # diff_dB = 20*np.log10(diff)
+      # diff_sum = np.sum(diff,axis=0)
+      # diff_smooth = uniform_filter1d(diff_sum, size=50)
+      # print(diff_sum.shape)
+      # plt.imshow(diff_dB,extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
+
+      # # plt.plot(self.Time,x*diff_smooth/np.amax(diff_smooth))
+      # plt.plot(self.Time, x*(1-(diff_smooth/np.amax(diff_smooth))))
+
+      # plt.subplot(212)
+      # plt.plot(diff_sum)
+      # plt.plot(diff_smooth)
+      
+      # plt.margins(0)
+      
+
+
+
       plt.show()
-      # self.TopInd
-      # self.BotInd
       pass
 
    def corr_coff(self,x):
       return stats.pearsonr(x[:,0]  ,x[:,1]  )[0]
-      
+
+   def corr_coff2(self,x,y):
+      return stats.pearsonr(x ,y  )[0]
+   
    
 
      
 if __name__ == "__main__":
-   file_name= 'Rabbit_Full/'+'Aor_F_10_23'
-   # file_name= 'Rabbit_Full/'+'Aor_F_20_24'
-   # file_name= 'Rabbit_Full/'+'Aor_M_10'
+   # file_name= 'Rabbit_Full/'+'Aor_F_10_25'
+   # file_name= 'Rabbit_Full/'+'Aor_F_20_26'
+   file_name= 'Rabbit_Full/'+'Aor_M_10'
 
    root = tk.Tk()
    MainApp(root,file_name,0).grid(row=0, column=1, padx=10, pady=5, sticky='NW')
