@@ -341,6 +341,9 @@ class PlotWindow():
 
    def Flow(self):
 
+      clean = 1
+      poly = 0
+
       dataRFRaw1 = self.dataRF.copy()[:,::2]
       dataRFRaw2 = self.dataRF.copy()[:,1::2]
 
@@ -348,14 +351,19 @@ class PlotWindow():
       y = dataRFRaw1.shape[1]
 
       window = 10
-      dataRF1 = self.declutter(dataRFRaw1,window)
-      dataRF2 = self.declutter(dataRFRaw2,window)
 
-      # dataRF1  = dataRFRaw1
-      # dataRF2 = dataRFRaw2
+      if poly == 1:
+         dataRF1 = self.declutter(dataRFRaw1,window)
+         dataRF2 = self.declutter(dataRFRaw2,window)
+      else:
+         dataRF1  = dataRFRaw1
+         dataRF2 = dataRFRaw2
  
-
-      data = self.clean1(self.dataRF)
+      if clean == 1:
+         data = self.clean(self.dataRF)
+      else:
+         data = self.clean1(self.dataRF)
+      
       data1 = data[:,::2]
       data2 = data[:,1::2]
      
@@ -401,7 +409,7 @@ class PlotWindow():
       dt = 200e-6
       for i in range(0,y):
          try:
-            flow[i] = ((-2*math.log(coff_vector[i]))**2)/dt
+            flow[i] = ((-2*math.log(coff_vector[i]))**0.5)/dt
          except:
             print("ERROR",str(i),coff_vector[i])
 
@@ -502,8 +510,12 @@ class PlotWindow():
       plt.figure(figsize=(15,4))
 
       plt.subplot(211)
-      plt.imshow(self.clean1(dataRF1),extent=[0,dataRFRaw1.shape[1],x,0 ],aspect='auto',cmap='gray')
+      if clean == 1:
+         plt.imshow(self.clean(dataRF1),extent=[0,dataRFRaw1.shape[1],x,0 ],aspect='auto',cmap='gray')
+      else:
+         plt.imshow(self.clean1(dataRF1),extent=[0,dataRFRaw1.shape[1],x,0 ],aspect='auto',cmap='gray')
 
+      
       plt.subplot(212)
       self.Average(flow_smooth,self.peaks)
 
