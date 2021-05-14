@@ -14,6 +14,7 @@ from scipy import interpolate
 from scipy import stats
 from scipy.ndimage.filters import uniform_filter1d
 import math
+from scipy.signal import savgol_filter
 
 def butter_highpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
@@ -325,12 +326,15 @@ class PlotWindow():
       
       peaks, _ = find_peaks(-x, distance=200)
       self.peaks = peaks
+      valleys, _ = find_peaks(x, distance=200)
+      valleys = valleys[1:]
 
-      plt.figure(figsize=(15,4))
+      plt.figure(figsize=(6,4))
 
       plt.subplot(211)
       plt.plot(self.Time,x)
-      plt.plot(self.Time[peaks], x[peaks], "x")
+      plt.plot(self.Time[peaks], x[peaks], "x",)
+      plt.plot(self.Time[valleys], x[valleys], "o",)
 
       plt.subplot(212)
       self.Average(x,self.peaks)
@@ -342,7 +346,7 @@ class PlotWindow():
    def Flow(self):
 
       clean = 1
-      poly = 0
+      poly = 1
 
       dataRFRaw1 = self.dataRF.copy()[:,::2]
       dataRFRaw2 = self.dataRF.copy()[:,1::2]
@@ -350,11 +354,12 @@ class PlotWindow():
       x = dataRFRaw1.shape[0]
       y = dataRFRaw1.shape[1]
 
-      window = 10
+      window = 20
+      window = 41
 
       if poly == 1:
-         dataRF1 = self.declutter(dataRFRaw1,window)
-         dataRF2 = self.declutter(dataRFRaw2,window)
+         dataRF1,slowdataRF1 = self.declutter(dataRFRaw1,window)
+         dataRF2,slowdataRF2 = self.declutter(dataRFRaw2,window)
       else:
          dataRF1  = dataRFRaw1
          dataRF2 = dataRFRaw2
@@ -366,6 +371,16 @@ class PlotWindow():
       
       data1 = data[:,::2]
       data2 = data[:,1::2]
+
+      S =  int(x/2)
+
+      plt.figure(figsize=(15,4))
+      plt.plot(dataRFRaw1[S])
+      plt.plot(slowdataRF1[S],'k')
+      plt.plot(dataRF1[S],'b')
+      plt.plot(dataRF2[S],'r')
+     
+
      
       print('starting flow calculations')
 
@@ -428,7 +443,9 @@ class PlotWindow():
       # D = ((-2*np.log(coff_vector))**0.5)/dt
       # flow = D*alpha
 
-      flow_smooth = uniform_filter1d(flow, size=20)
+      # flow_smooth = uniform_filter1d(flow, size=20)
+      flow_smooth = flow
+
       plt.figure(figsize=(15,4))
       plt.subplot(211)
       # plt.imshow(data,extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
@@ -482,29 +499,6 @@ class PlotWindow():
 
 
 
-
-
-
-
-      # plt.figure(figsize=(15,4))
-
-      # plt.subplot(211)
-      # diff =  np.abs(dataRF2-dataRF1)
-      # diff_dB = 20*np.log10(diff)
-      # diff_sum = np.sum(diff,axis=0)
-      # diff_smooth = uniform_filter1d(diff_sum, size=50)
-      # print(diff_sum.shape)
-      # plt.imshow(diff_dB,extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
-
-      # # plt.plot(self.Time,x*diff_smooth/np.amax(diff_smooth))
-      # plt.plot(self.Time, x*(1-(diff_smooth/np.amax(diff_smooth))))
-
-      # plt.subplot(212)
-      # plt.plot(diff_sum)
-      # plt.plot(diff_smooth)
-      
-      # plt.margins(0)
-      
       
 
       plt.figure(figsize=(15,4))
@@ -529,7 +523,16 @@ class PlotWindow():
       return stats.pearsonr(x ,y  )[0]
 
    def declutter(self,x,window):
-      return x-uniform_filter1d(x, size=window)
+      # slowX = uniform_filter1d(x, size=window,axis=1)
+      slowX = savgol_filter(x, window, 8, deriv=0, delta=1.0, axis=1, mode='interp', cval=0.0)
+      timeStep = self.Time[10]-self.Time[9]
+      fs = 1/timeStep
+      # slowX = butter_lowpass_filter(x,0.01,fs,50)
+      print("SlowX")
+      print(slowX.shape)
+      out = x-slowX
+      # out = butter_highpass_filter(x,100,fs,5)
+      return out,slowX
 
       t = range(0,x.shape[1])
       for i in range(0,x.shape[0]):
@@ -539,20 +542,39 @@ class PlotWindow():
    
 
    def Average(self,x,peaks):
- 
 
-      ave = np.zeros(300)
+      peak_num = len(peaks)
+      peak_dist = len(x)
+
+      for i in range(0,int((peak_num/2)-1)):
+         peak_dist = min(peak_dist,  peaks[i+1] - peaks[i]     )
+      
+      print("PEAK DIST")
+      print(peak_dist)
+            
+      timeStep = self.Time[10]-self.Time[9]
+      t = np.arange(0,peak_dist)*timeStep
+
+      ave = np.zeros(peak_dist)
 
       for peak in peaks[:-2]:
 
-         cycle = x[peak:peak+300]
+         cycle = x[peak:peak+peak_dist]
          ave = ave + cycle
-         plt.plot( cycle, c='#0f0f0f20')
+         plt.plot( t,cycle, c='#0f0f0f20')
 
       
+      data = ave/(len(peaks)- 2)
+      
+      plt.plot( t,data ,"-")
 
-      # plt.plot( x[peaks[0]:peaks[0]+300], "-")
-      plt.plot( ave/( len(peaks) - 2), "-")
+      np.savetxt("output/time.csv", t, delimiter=",")
+      np.savetxt("output/data.csv", data, delimiter=",")
+
+      np.savetxt("output/Fulltime.csv", self.Time, delimiter=",")
+      np.savetxt("output/Fulldata.csv", x, delimiter=",")
+
+      np.savetxt("output/Peaks_" + str(peak_dist) + ".csv", peaks, delimiter=",")
       
 
   
@@ -572,9 +594,9 @@ class PlotWindow():
      
 if __name__ == "__main__":
    # file_name= 'Rabbit_Full/'+'Aor_F_10_20'
-   # file_name= 'Rabbit_Full/'+'Aor_F_20_26'
-   file_name= 'Rabbit_Full/'+'Aor_M_10'
-   # file_name= 'Rabbit_Full/'+'Aor_M_20'
+   # file_name= 'Rabbit_Full/'+'Aor_F_20_24'
+   # file_name= 'Rabbit_Full/'+'Aor_M_10'
+   file_name= 'Rabbit_Full/'+'Aor_M_20'
 
    root = tk.Tk()
    MainApp(root,file_name,0).grid(row=0, column=1, padx=10, pady=5, sticky='NW')
