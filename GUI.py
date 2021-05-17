@@ -34,7 +34,7 @@ def butter_lowpass(cutoff, fs, order=5):
     return b, a
 
 def butter_lowpass_filter(data, cutoff, fs, order=5):
-    b, a = butter_highpass(cutoff, fs, order=order)
+    b, a = butter_lowpass(cutoff, fs, order=order)
     y = signal.filtfilt(b, a, data)
     return y
 
@@ -49,8 +49,10 @@ class MainApp(tk.Frame):
         X = np.load(XF )
         Time = np.load(TF)
         Time = Time - Time[0]
-        X = butter_highpass_filter(X.T,1*1e6,20*1e6,order =5).T  # MUST BE ROW ARRAY 32*1000
-        # data = self.clean(X)
+        X = butter_highpass_filter(X.T,3*1e6,20*1e6,order =5).T  # MUST BE ROW ARRAY 32*1000
+
+        X = butter_lowpass_filter( X.T,8*1e6,20*1e6,order =5).T  # MUST BE ROW ARRAY 32*1000
+      #   data = self.clean(X)
         data = X
 
       #  set plot window
@@ -92,6 +94,14 @@ class PlotWindow():
       self.scale = 1.540*0.5*(1/20)
       print(self.scale)
       self.extent = [self.Time[0],self.Time[-1], self.endIdx *self.scale,self.startIdx *self.scale]
+
+
+      print(self.Time.shape)
+      y = self.Time.reshape(-1,2).T
+      self.fs  = 1/(np.mean(y[1]-y[0]))
+      print(self.Time.shape,y.shape,self.fs)
+
+
       
       # **********************************************  Scale
       self.VerOffVar =  tk.DoubleVar()
@@ -141,6 +151,7 @@ class PlotWindow():
       #  Button 
       self.button = tk.Button(master=parent,bg='whitesmoke', text="Wall", command=self.Wall)
       self.Flowbutton = tk.Button(master=parent,bg='whitesmoke', text="Flow", command=self.Flow)
+      self.SpectrumButton = tk.Button(master=parent,bg='whitesmoke', text="Spectrum", command=self.Spectrum)
 
 
 
@@ -149,6 +160,7 @@ class PlotWindow():
       self.RangeScale.grid(row=x, column=y+2, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
       self.button.grid(row=x+1, column=y+1, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
       self.Flowbutton.grid(row=x+2, column=y+1, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
+      self.SpectrumButton.grid(row=x+3, column=y+1, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
 
       self.canvas.get_tk_widget().grid(row=x, column=y, padx=5, pady=5, sticky='w'+'e'+'n'+'s')
 
@@ -348,44 +360,51 @@ class PlotWindow():
       clean = 1
       poly = 1
 
-      dataRFRaw1 = self.dataRF.copy()[:,::2]
+      dataRFRaw1 = self.dataRF.copy()[:,0::2]
       dataRFRaw2 = self.dataRF.copy()[:,1::2]
-
       x = dataRFRaw1.shape[0]
       y = dataRFRaw1.shape[1]
 
       window = 20
-      window = 41
-
+      window = 21
       if poly == 1:
          dataRF1,slowdataRF1 = self.declutter(dataRFRaw1,window)
          dataRF2,slowdataRF2 = self.declutter(dataRFRaw2,window)
       else:
          dataRF1  = dataRFRaw1
          dataRF2 = dataRFRaw2
+
  
       if clean == 1:
-         data = self.clean(self.dataRF)
+         data1 = self.clean(dataRFRaw1)
+         data2 = self.clean(dataRFRaw2)
+
       else:
-         data = self.clean1(self.dataRF)
+         data1 = self.clean1(dataRFRaw1)
+         data2 = self.clean1(dataRFRaw2)
       
-      data1 = data[:,::2]
-      data2 = data[:,1::2]
+ 
 
       S =  int(x/2)
 
+      D1 = self.clean1(dataRF1)
+      D2 = self.clean1(dataRF2)
+
       plt.figure(figsize=(15,4))
-      plt.plot(dataRFRaw1[S])
-      plt.plot(slowdataRF1[S],'k')
+      plt.plot(dataRFRaw1[S],'g')
+      if poly == 1:
+         plt.plot(slowdataRF1[S],'k')
       plt.plot(dataRF1[S],'b')
       plt.plot(dataRF2[S],'r')
+      plt.xlim(1900, 2500) 
+      plt.ylim(-20, 40) 
      
 
      
       print('starting flow calculations')
 
       print('Shape of data array')
-      print(data.shape,data1.shape,data2.shape)
+      print(data1.shape,data2.shape)
 
       print('Shape of time array')
       print(self.Time.shape)
@@ -393,21 +412,27 @@ class PlotWindow():
       coff_vector = np.ones(y)
 
 
+
       for i in range(0,y):
          ii = int(self.TopInd[i]) - self.startIdx
          jj = int(self.BotInd[i]) - self.startIdx
 
-         data[0:ii,2*i:2*i+2] = 0
-         data[jj:,2*i:2*i+2] = 0
+         # data[0:ii,2*i:2*i+2] = 0
+         # data[jj:,2*i:2*i+2] = 0
 
-         dataRF1[0:ii,i] = 0
-         dataRF1[jj:,i] = 0
+         # dataRF1[0:ii,i] = 0
+         # dataRF1[jj:,i] = 0
 
-         dataRF2[0:ii,i] = 0
-         dataRF2[jj:,i] = 0
+         # dataRF2[0:ii,i] = 0
+         # dataRF2[jj:,i] = 0
 
-         # coff_vector[i] = self.corr_coff2(dataRF1[ii:jj,i],dataRF2[ii:jj,i])
-         coff_vector[i] = self.corr_coff2(dataRF1[:,i],dataRF2[:,i])
+         coff_vector[i] = self.corr_coff2(dataRF1[ii:jj,i],dataRF2[ii:jj,i])
+
+         # coff_vector[i] = self.corr_coff2(self.clean1(dataRF1[:,i]),self.clean1(dataRF2[:,i]))
+
+         # coff_vector[i] = self.corr_coff2(dataRF1[:,i],dataRF2[:,i])
+
+         # coff_vector[i] = self.corr_coff2(D1[ii:jj,i],D2[ii:jj,i])
 
        
 
@@ -418,15 +443,17 @@ class PlotWindow():
       # coff_vector = coff_vector+ 0.1
 
       # coff_vector[coff_vector>1] = 1
-      coff_vector[coff_vector<0] = 0.001
+      # # coff_vector[coff_vector == -1] = 1
+      # coff_vector[coff_vector<0] = 0.001
 
       # coff_vector[coff_vector==0] = 
-      dt = 200e-6
-      for i in range(0,y):
-         try:
-            flow[i] = ((-2*math.log(coff_vector[i]))**0.5)/dt
-         except:
-            print("ERROR",str(i),coff_vector[i])
+
+      # dt = 200e-6
+      # for i in range(0,y):
+      #    try:
+      #       flow[i] = ((-2*math.log(coff_vector[i]))**0.5)/dt
+      #    except:
+      #       print("ERROR",str(i),coff_vector[i])
 
 
 
@@ -452,14 +479,16 @@ class PlotWindow():
       # plt.imshow(self.clean1(dataRF1),extent=[self.Time[0],self.Time[-1],x,0 ],aspect='auto',cmap='gray')
 
       plt.imshow(self.clean1(dataRF1),extent=[0,dataRFRaw1.shape[1],x,0 ],aspect='auto',cmap='gray')
+      plt.plot(self.TopInd - self.startIdx,'m')
+      plt.plot(self.BotInd - self.startIdx,'r')
       
       # flow_smooth = np.flip(flow_smooth)
 
       # plt.plot(self.Time, x*(1-(flow_smooth/np.amax(flow_smooth))))
       # plt.plot(self.Time, x*(1-(self.wall/np.amax(self.wall))))
 
-      plt.plot( x*(1-(flow_smooth/np.amax(flow_smooth))))
-      plt.plot( x*(1-(self.wall/np.amax(self.wall))))
+      # plt.plot( x*(1-(flow_smooth/np.amax(flow_smooth))))
+      # plt.plot( x*(1-(self.wall/np.amax(self.wall))))
 
       
 
@@ -509,9 +538,12 @@ class PlotWindow():
       else:
          plt.imshow(self.clean1(dataRF1),extent=[0,dataRFRaw1.shape[1],x,0 ],aspect='auto',cmap='gray')
 
-      
+      plt.plot(self.TopInd - self.startIdx,'m')
+      plt.plot(self.BotInd - self.startIdx,'r')   
+
       plt.subplot(212)
       self.Average(flow_smooth,self.peaks)
+
 
       plt.show()
       pass
@@ -524,14 +556,18 @@ class PlotWindow():
 
    def declutter(self,x,window):
       # slowX = uniform_filter1d(x, size=window,axis=1)
-      slowX = savgol_filter(x, window, 8, deriv=0, delta=1.0, axis=1, mode='interp', cval=0.0)
-      timeStep = self.Time[10]-self.Time[9]
-      fs = 1/timeStep
-      # slowX = butter_lowpass_filter(x,0.01,fs,50)
+
+      slowX = savgol_filter(x, window, 5, deriv=0, delta=1.0, axis=1, mode='interp', cval=0.0)
+     
+
+      # fs = self.fs
+      # slowX = butter_lowpass_filter(x,100,fs,5)
+      # # out = butter_highpass_filter(x,300,fs,5)
+      
+      
+      out = x-slowX
       print("SlowX")
       print(slowX.shape)
-      out = x-slowX
-      # out = butter_highpass_filter(x,100,fs,5)
       return out,slowX
 
       t = range(0,x.shape[1])
@@ -589,14 +625,53 @@ class PlotWindow():
     # Mask of locations where graph comes from vertical or horizontal, depending on vec
     from_mask = ((d[1:] != 0) & (d[1:] == dd))
     return to_mask, from_mask
+
+
+   def Spectrum(self):
+      dataRFRaw1 = self.dataRF.copy()[:,::2]
+     
+      x = dataRFRaw1.shape[0]
+      S =  int(x/2)
+      Data = dataRFRaw1[S]
+
+
+      print(self.fs)
+
+ 
+
+      plt.figure()
+      wind = 50
+      spectrum2D, ff,tt,im = plt.specgram(Data,NFFT=wind, Fs=self.fs, noverlap=wind-5,cmap="jet_r")
+      print(spectrum2D.shape)
+      plt.figure()
+      plt.imshow(np.log(spectrum2D),extent= [tt[0], tt[-1], ff[0], ff[-1]   ],cmap='jet_r',aspect=0.01,origin='lower' )
+     
+
+      be = 0
+      ee = 5
+
+      u, s, vh = np.linalg.svd(np.log(spectrum2D),full_matrices=False)
+      SVD  =  np.dot(u[:,be:ee] * s[be:ee], vh[be:ee,:])
+
+
+      plt.figure()
+      plt.imshow(SVD,extent= [tt[0], tt[-1], ff[0], ff[-1]   ],cmap='jet_r',aspect=0.01,origin='lower' )
+
+      plt.figure()
+      plt.plot( s )
+      
+
+      plt.show()
+
+      pass
    
 
      
 if __name__ == "__main__":
-   # file_name= 'Rabbit_Full/'+'Aor_F_10_20'
+   # file_name= 'Rabbit_Full/'+'Aor_F_10_25'
    # file_name= 'Rabbit_Full/'+'Aor_F_20_24'
-   # file_name= 'Rabbit_Full/'+'Aor_M_10'
    file_name= 'Rabbit_Full/'+'Aor_M_20'
+   # file_name= 'Rabbit_Full/'+'Aor_F'
 
    root = tk.Tk()
    MainApp(root,file_name,0).grid(row=0, column=1, padx=10, pady=5, sticky='NW')
