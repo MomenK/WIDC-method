@@ -1,3 +1,5 @@
+from pylbfgs import owlqn
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.fftpack import dct, idct
@@ -8,6 +10,51 @@ from os import listdir
 from scipy.signal import hilbert, chirp
 from scipy import signal
 from scipy import interpolate
+
+def dct2(x):
+    return dct(dct(x.T, norm='ortho', axis=0).T, norm='ortho', axis=0)
+
+def idct2(x):
+    return idct(idct(x.T, norm='ortho', axis=0).T, norm='ortho', axis=0)
+
+
+
+def evaluate(x, g, step):
+    """An in-memory evaluation callback."""
+
+    # we want to return two things: 
+    # (1) the norm squared of the residuals, sum((Ax-b).^2), and
+    # (2) the gradient 2*A'(Ax-b)
+
+    # expand x columns-first
+    x2 = x.reshape((nx, ny)).T
+
+    # Ax is just the inverse 2D dct of x2
+    Ax2 = idct2(x2)
+
+    # stack columns and extract samples
+    Ax = Ax2.T.flat[perm].reshape(y.shape)
+
+    # calculate the residual Ax-b and its 2-norm squared
+    Axb = Ax - y
+    fx = np.sum(np.power(Axb, 2))
+
+    # project residual vector (k x 1) onto blank image (ny x nx)
+    Axb2 = np.zeros(x2.shape)
+    Axb2.T.flat[perm] = Axb # fill columns-first
+
+    # A'(Ax-b) is just the 2D dct of Axb2
+    AtAxb2 = 2 * dct2(Axb2)
+    
+    AtAxb = AtAxb2.T.reshape(x.shape) # stack columns
+
+    # copy over the gradient vector
+    np.copyto(g, AtAxb)
+
+    return fx
+
+######################################################################################
+
 
 ######################################################################################
 def capture(folder,index):
@@ -88,6 +135,21 @@ def diameter(X):
 
     pass
 ######################################################################################
+def repeat_random(k,ny,nx,C):
+    permCD = np.zeros((k,C))
+    perm = np.zeros((k,nx))
+
+    for j in range(C):
+        permCD[:,j] = np.random.choice(ny, k, replace=False)
+
+    offset = 0
+    for i in range(nx):
+        ii = int(i%C)
+        perm[:,i]  = permCD[:,ii] + offset
+        offset = offset+ny
+
+    return perm.flat[:].astype(int)
+######################################################################################
 
 
 ## Read Image file
@@ -95,57 +157,54 @@ file_name= 'Rabbit_Full/'+'Aor_M_20'
 index = 0
 XF,TF = capture(file_name,index)
 X = np.load(XF)
-# X = X[::2,:]
-# X = butter_highpass_filter(X.T,1*1e6,20*1e6,order =5).T  # MUST BE ROW ARRAY 32*1000
-# X = butter_lowpass_filter( X.T,8*1e6,20*1e6,order =5).T  # MUST BE ROW ARRAY 32*1000
-# X = X[550:750,::2]
-# X = X[550:750,100:2000:2]
 X = X[500:800,:3000:2]
 Time = np.load(TF)
-print(X.shape)
-# X = clean(X)
+
+######################################################################################
+
 
 ## Randomly samples the signal
-[nx,ny] = X.shape
-per = 0.7
-p = np.round(nx*per).astype(int)
-print(p,nx)
-perm = np.random.choice(nx, p, replace=False)
-y = np.zeros((p,ny))
-for i in range(ny):
-    y[:,i] = X[perm,i]
+# [nx,ny] = X.shape
+[ny,nx] = X.shape
+
+# create random sampling index vector
+s = 0.4
+# k = round(nx * ny * s)
+# perm = np.random.choice(nx * ny, k, replace=False) # random sample of indices
+
+# This bits consider uniform sampling! consider have a random rpeat rate of beat cycle
+C = 20
+k = round(ny * s)
+perm = repeat_random(k,ny,nx,C)
 
 
 
+######################################################################################
 
 
-# ## Solve compressed sensing problem
-Xrecon = np.zeros((nx,ny))
-Psi = dct(np.identity(nx))
-Theta = Psi[perm,:]
-
-for i in range(ny):
-    print(i)
-    s = cosamp(Theta,y[:,i],10,epsilon=1.e-10,max_iter=10)
-    xrecon = idct(s)
-    Xrecon[:,i] = xrecon
-
-## Solve with other methods
-# for i in range(ny):
-#     print(i)
-#     vx = cvx.Variable(nx)
-#     objective = cvx.Minimize(cvx.norm(vx, 1))
-#     constraints = [Theta*vx == y[:,i]]
-#     prob = cvx.Problem(objective, constraints)
-#     result = prob.solve(verbose=False)
-#     s = np.array(vx.value)
-#     s = np.squeeze(s)
-#     xrecon = idct(s)
-#     Xrecon[:,i] = xrecon
+# take random samples of image, store them in a vector b
+y = b = X.T.flat[perm].astype(float)
 
 
+# create images of mask (for visualization)
+Xm = 0 * np.ones(X.shape)
+# Xm.T.flat[perm] = X.T.flat[perm]
+Xm.T.flat[perm] = 255 * np.ones(perm.shape)
+Xm.reshape((nx, ny)).T 
 
 
+# perform the L1 minimization in memory
+Xat2 = owlqn(nx*ny, evaluate, None, 5)
+
+# # transform the output back into the spatial domain
+Xat = Xat2.reshape((nx, ny)).T # stack columns
+Xrecon = idct2(Xat)
+
+# print(X.shape)
+# print(Xat.shape)
+# print(Xrecon.shape)
+
+######################################################################################
 ## Plot
 fig,axes = plt.subplots(1,4)
 axes = axes.reshape(-1)
@@ -153,24 +212,20 @@ axes = axes.reshape(-1)
 
 image = axes[0].imshow(clean(X),aspect='auto',cmap='gray')
 image.set_clim(vmin=-40, vmax= 0)
+axes[0].title.set_text('Original Image (100 % sampling)')
 
-Xm = 0 * np.ones(X.shape)
-for i in range(ny):
-    Xm[perm,i]  = y[:,i] 
 image = axes[1].imshow(Xm,aspect='auto',cmap='gray')
-image.set_clim(vmin=-40, vmax= 0)
+# image.set_clim(vmin=-40, vmax= 0)
+axes[1].title.set_text('Random sampling matrix (40 % sampling)')
 
 image = axes[2].imshow(clean(Xrecon),aspect='auto',cmap='gray')
-image.set_clim(vmin=-40, vmax= 0)
+image.set_clim(vmin=-38, vmax= 0)
+axes[2].title.set_text('Reconstructed Image (40 % sampling)')
 
-
-# fig,axes = plt.subplots(1,2)
-# axes = axes.reshape(-1)
 axes[3].plot(diameter(X)[10:],'b')
 axes[3].plot(diameter(Xrecon)[10:],'r')
-
-
-
-
+axes[3].title.set_text('Diameter traces')
 
 plt.show()
+
+# # print(perm.shape)

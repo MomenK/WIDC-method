@@ -47,8 +47,10 @@ xrecon = idct(s)
 
 ## Plot
 axes[0].plot(t,xrecon,'r')
-axes[1].set_xlim(time_window[0],time_window[1])
-axes[1].set_ylim(-2,2)
+# axes[1].set_xlim(time_window[0],time_window[1])
+# axes[1].set_ylim(-2,2)
+
+axes[1].imshow(Theta)
 
 plt.show()
 

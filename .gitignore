@@ -3,3 +3,5 @@ Rabbit_Full/*
 *.csv
 *.png
 *.zip
+liblbfgs*
+pylbfgs

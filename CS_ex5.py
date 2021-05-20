@@ -88,6 +88,22 @@ def diameter(X):
 
     pass
 ######################################################################################
+def repeat_random(k,nx,ny,C):
+    permCD = np.zeros((k,C))
+    perm = np.zeros((k,ny))
+
+    for j in range(C):
+        permCD[:,j] = np.random.choice(nx, k, replace=False)
+
+    
+    for i in range(ny):
+        ii = int(i%C)
+        perm[:,i]  = permCD[:,ii] 
+      
+
+    # return perm.flat[:].astype(int)
+    return perm.astype(int)
+######################################################################################
 
 
 ## Read Image file
@@ -95,55 +111,60 @@ file_name= 'Rabbit_Full/'+'Aor_M_20'
 index = 0
 XF,TF = capture(file_name,index)
 X = np.load(XF)
-# X = X[::2,:]
-# X = butter_highpass_filter(X.T,1*1e6,20*1e6,order =5).T  # MUST BE ROW ARRAY 32*1000
-# X = butter_lowpass_filter( X.T,8*1e6,20*1e6,order =5).T  # MUST BE ROW ARRAY 32*1000
-# X = X[550:750,::2]
-# X = X[550:750,100:2000:2]
 X = X[500:800,:3000:2]
 Time = np.load(TF)
-print(X.shape)
-# X = clean(X)
+
+#######################################################################################
 
 ## Randomly samples the signal
 [nx,ny] = X.shape
-per = 0.7
-p = np.round(nx*per).astype(int)
-print(p,nx)
-perm = np.random.choice(nx, p, replace=False)
-y = np.zeros((p,ny))
+
+s = 0.5
+C = 20
+k = round(nx * s)
+perm = repeat_random(k,nx,ny,C)
+
+
+y = np.zeros((k,ny))
+
 for i in range(ny):
-    y[:,i] = X[perm,i]
+    y[:,i] = X[perm[:,i],i]
 
 
+######################################################################################
 
 
 
 # ## Solve compressed sensing problem
+
 Xrecon = np.zeros((nx,ny))
 Psi = dct(np.identity(nx))
-Theta = Psi[perm,:]
 
-for i in range(ny):
-    print(i)
-    s = cosamp(Theta,y[:,i],10,epsilon=1.e-10,max_iter=10)
-    xrecon = idct(s)
-    Xrecon[:,i] = xrecon
-
-## Solve with other methods
 # for i in range(ny):
+    
+    
+#     Theta = Psi[perm[:,i],:]
 #     print(i)
-#     vx = cvx.Variable(nx)
-#     objective = cvx.Minimize(cvx.norm(vx, 1))
-#     constraints = [Theta*vx == y[:,i]]
-#     prob = cvx.Problem(objective, constraints)
-#     result = prob.solve(verbose=False)
-#     s = np.array(vx.value)
-#     s = np.squeeze(s)
+#     s = cosamp(Theta,y[:,i],50,epsilon=1.e-10,max_iter=10)
 #     xrecon = idct(s)
 #     Xrecon[:,i] = xrecon
 
+## Solve with other methods
+for i in range(ny):
+    Theta = Psi[perm[:,i],:]
+    print(i)
+    vx = cvx.Variable(nx)
+    objective = cvx.Minimize(cvx.norm(vx, 1))
+    constraints = [Theta*vx == y[:,i]]
+    prob = cvx.Problem(objective, constraints)
+    result = prob.solve(verbose=False)
+    s = np.array(vx.value)
+    s = np.squeeze(s)
+    xrecon = idct(s)
+    Xrecon[:,i] = xrecon
 
+
+######################################################################################
 
 
 ## Plot
@@ -155,8 +176,9 @@ image = axes[0].imshow(clean(X),aspect='auto',cmap='gray')
 image.set_clim(vmin=-40, vmax= 0)
 
 Xm = 0 * np.ones(X.shape)
+
 for i in range(ny):
-    Xm[perm,i]  = y[:,i] 
+    Xm[perm[:,i],i]  = 255
 image = axes[1].imshow(Xm,aspect='auto',cmap='gray')
 image.set_clim(vmin=-40, vmax= 0)
 
